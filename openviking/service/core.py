@@ -114,15 +114,41 @@ class OpenVikingService:
         """Initialize storage resources."""
         from openviking.utils.agfs_utils import create_agfs_client
 
-        mode = getattr(config.agfs, "mode", "http-client")
-        if mode == "http-client":
-            self._agfs_manager = AGFSManager(config=config.agfs)
-            self._agfs_manager.start()
-            agfs_url = self._agfs_manager.url
-            config.agfs.url = agfs_url
+        # ----------------------------------------------------------------
+        # Salesforce CMS adapter — used instead of AGFS when configured.
+        # Enable by adding a [storage.cms] section to ov.conf:
+        #   instance_url, client_id, client_secret, space_id, bu_context
+        # ----------------------------------------------------------------
+        if getattr(config, "cms", None) is not None:
+            from openviking.storage.cms_adapter import CMSClient, SalesforceCMSConfig, SalesforceCMSFS
 
-        # Create AGFS client using utility
-        self._agfs_client = create_agfs_client(config.agfs)
+            cms_raw = config.cms
+            if isinstance(cms_raw, dict):
+                cms_cfg = SalesforceCMSConfig(**cms_raw)
+            else:
+                cms_cfg = SalesforceCMSConfig.model_validate(cms_raw)
+
+            cms_client = CMSClient(cms_cfg)
+            self._agfs_client = SalesforceCMSFS(
+                client=cms_client,
+                space_id=cms_cfg.space_id,
+                bu_context=cms_cfg.bu_context,
+            )
+            logger.info(
+                "[OpenViking] Using Salesforce CMS adapter (space=%s bu_context=%s)",
+                cms_cfg.space_id,
+                cms_cfg.bu_context,
+            )
+        else:
+            mode = getattr(config.agfs, "mode", "http-client")
+            if mode == "http-client":
+                self._agfs_manager = AGFSManager(config=config.agfs)
+                self._agfs_manager.start()
+                agfs_url = self._agfs_manager.url
+                config.agfs.url = agfs_url
+
+            # Create AGFS client using utility
+            self._agfs_client = create_agfs_client(config.agfs)
 
         # Initialize QueueManager with agfs_client
         if self._agfs_client:

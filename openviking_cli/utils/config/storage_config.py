@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Beijing Volcano Engine Technology Co., Ltd.
 # SPDX-License-Identifier: Apache-2.0
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -38,6 +38,17 @@ class StorageConfig(BaseModel):
 
     params: Dict[str, Any] = Field(
         default_factory=dict, description="Additional storage-specific parameters"
+    )
+
+    # Optional Salesforce CMS adapter — when set, CMS is used instead of AGFS
+    # for storing skills, memories, and resources.
+    cms: Optional[Any] = Field(
+        default=None,
+        description=(
+            "Salesforce CMS adapter configuration. "
+            "When present, OpenViking uses Salesforce CMS as the storage backend "
+            "instead of AGFS, enabling BU-specific variant support for Agentforce agents."
+        ),
     )
 
     model_config = {"extra": "forbid"}
