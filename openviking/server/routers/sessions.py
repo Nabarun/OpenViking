@@ -1,8 +1,9 @@
 # Copyright (c) 2026 Beijing Volcano Engine Technology Co., Ltd.
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0
 """Sessions endpoints for OpenViking HTTP Server."""
 
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Path, Query
@@ -13,7 +14,6 @@ from openviking.server.auth import get_request_context
 from openviking.server.dependencies import get_service
 from openviking.server.identity import RequestContext
 from openviking.server.models import ErrorInfo, Response
-from openviking.service.task_tracker import get_task_tracker
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
 logger = logging.getLogger(__name__)
@@ -64,6 +64,7 @@ class AddMessageRequest(BaseModel):
     role: str
     content: Optional[str] = None
     parts: Optional[List[Dict[str, Any]]] = None
+    created_at: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_content_or_parts(self) -> "AddMessageRequest":
@@ -138,7 +139,45 @@ async def get_session(
         )
     result = session.meta.to_dict()
     result["user"] = session.user.to_dict()
+    pending_tokens = sum(len(m.content) // 4 for m in session.messages)
+    result["pending_tokens"] = pending_tokens
     return Response(status="ok", result=result)
+
+
+@router.get("/{session_id}/context")
+async def get_session_context(
+    session_id: str = Path(..., description="Session ID"),
+    token_budget: int = Query(128_000, description="Token budget for session context"),
+    _ctx: RequestContext = Depends(get_request_context),
+):
+    """Get assembled session context."""
+    service = get_service()
+    session = service.sessions.session(_ctx, session_id)
+    await session.load()
+    result = await session.get_session_context(token_budget=token_budget)
+    return Response(status="ok", result=_to_jsonable(result))
+
+
+@router.get("/{session_id}/archives/{archive_id}")
+async def get_session_archive(
+    session_id: str = Path(..., description="Session ID"),
+    archive_id: str = Path(..., description="Archive ID"),
+    _ctx: RequestContext = Depends(get_request_context),
+):
+    """Get one completed archive for a session."""
+    from openviking_cli.exceptions import NotFoundError
+
+    service = get_service()
+    session = service.sessions.session(_ctx, session_id)
+    await session.load()
+    try:
+        result = await session.get_session_archive(archive_id)
+    except NotFoundError:
+        return Response(
+            status="error",
+            error=ErrorInfo(code="NOT_FOUND", message=f"Archive {archive_id} not found"),
+        )
+    return Response(status="ok", result=_to_jsonable(result))
 
 
 @router.delete("/{session_id}")
@@ -164,18 +203,6 @@ async def commit_session(
     polling progress via ``GET /tasks/{task_id}``.
     """
     service = get_service()
-    tracker = get_task_tracker()
-
-    # Reject if same session already has a commit in progress
-    if tracker.has_running("session_commit", session_id):
-        return Response(
-            status="error",
-            error=ErrorInfo(
-                code="CONFLICT",
-                message=f"Session {session_id} already has a commit in progress",
-            ),
-        )
-
     result = await service.sessions.commit_async(session_id, _ctx)
     return Response(status="ok", result=result).model_dump(exclude_none=True)
 
@@ -220,7 +247,15 @@ async def add_message(
     else:
         parts = [TextPart(text=request.content or "")]
 
-    session.add_message(request.role, parts)
+    # 解析 created_at
+    created_at = None
+    if request.created_at:
+        try:
+            created_at = datetime.fromisoformat(request.created_at)
+        except ValueError:
+            logger.warning(f"Invalid created_at format: {request.created_at}")
+
+    session.add_message(request.role, parts, created_at=created_at)
     return Response(
         status="ok",
         result={
