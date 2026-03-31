@@ -6,6 +6,7 @@ Memory tools - encapsulate VikingFS read operations for ReAct loop.
 Reference: bot/vikingbot/agent/tools/base.py design pattern
 """
 
+import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -65,7 +66,12 @@ def add_tool_call_pair_to_messages(
 ) -> None:
     """Add a tool call pair with optimized format to save tokens."""
     messages.append(
-        {"role": "user", "content": {"tool_call_name": tool_name, "args": params, "result": result}}
+        {
+            "role": "user",
+            "content": json.dumps(
+                {"tool_call_name": tool_name, "args": params, "result": result}, ensure_ascii=False
+            ),
+        }
     )
 
 
