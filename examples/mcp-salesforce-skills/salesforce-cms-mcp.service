@@ -1,0 +1,28 @@
+[Unit]
+Description=Salesforce CMS Skills MCP Server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/openviking/examples/mcp-salesforce-skills
+ExecStart=/usr/local/bin/uv run server.py --host 0.0.0.0 --port 2034
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+# Salesforce credentials
+Environment=SF_INSTANCE_URL=https://learnforce1-dev-ed.my.salesforce.com
+Environment=SF_CLIENT_ID=your_client_id
+Environment=SF_CLIENT_SECRET=your_client_secret
+Environment=SF_SPACE_ID=your_space_id
+Environment=SF_API_VERSION=v66.0
+Environment=SF_BU_CONTEXT=health_cloud
+Environment=MCP_BEARER_TOKEN=your_secret_token
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

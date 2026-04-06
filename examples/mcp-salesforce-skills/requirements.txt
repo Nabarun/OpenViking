@@ -1,0 +1,2 @@
+openviking>=0.1.6
+mcp>=1.8.0

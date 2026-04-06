@@ -1,0 +1,9 @@
+[project]
+name = "salesforce-cms-skills-mcp"
+version = "0.1.0"
+description = "MCP server: loads OpenViking skills from Salesforce CMS"
+requires-python = ">=3.11"
+dependencies = [
+    "openviking>=0.1.6",
+    "mcp>=1.8.0",
+]
